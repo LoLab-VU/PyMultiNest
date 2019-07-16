@@ -1,15 +1,14 @@
 from __future__ import absolute_import, unicode_literals, print_function
 from ctypes import cdll
-import sys, os
+import sys
 
 libname = 'libmultinest'
 try: # detect if run through mpiexec/mpirun
 	from mpi4py import MPI
 	if MPI.COMM_WORLD.Get_size() > 1: # need parallel capabilities
 		libname = 'libmultinest_mpi'
-except ImportError as e:
-	if 'PMIX_RANK' in os.environ:
-		print("Not using MPI because import mpi4py failed: '%s'. To debug, run python -c 'import mpi4py'.", e)
+except ImportError:
+	pass
 
 libname += {
 	'darwin' : '.dylib',
@@ -76,7 +75,7 @@ def run(LogLikelihood,
 	max_modes = 100, mode_tolerance = -1e90,
 	outputfiles_basename = "chains/1-", seed = -1, verbose = False,
 	resume = True, context = 0, write_output = True, log_zero = -1e100, 
-	max_iter = 0, init_MPI = False, dump_callback = None):
+	max_iter = 0, init_MPI = False, dump_callback = None, counts=None):
 	"""
 	Runs MultiNest
 	
@@ -205,12 +204,24 @@ def run(LogLikelihood,
 		def loglike(cube, ndim, nparams, lnew, nullcontext):
 			if Prior:
 				Prior(cube, ndim, nparams)
-			return LogLikelihood(cube, ndim, nparams, lnew)
+			result = LogLikelihood(cube, ndim, nparams, lnew)
+			if result[0] == 'fail':
+				counts[1] += 1
+			if result[0] == 'sim':
+				counts[0] += 1
+			return result[1]
+			# return LogLikelihood(cube, ndim, nparams, lnew)
 	else:
 		def loglike(cube, ndim, nparams, lnew, nullcontext):
 			if Prior:
 				Prior(cube, ndim, nparams)
-			return LogLikelihood(cube, ndim, nparams)
+			result = LogLikelihood(cube, ndim, nparams)
+			if result[0] == 'fail':
+				counts[1] += 1
+			if result[0] == 'sim':
+				counts[0] += 1
+			return result[1]
+			# return LogLikelihood(cube, ndim, nparams)
 	
 	def dumper(nSamples,nlive,nPar,
 			   physLive,posterior,paramConstr,
